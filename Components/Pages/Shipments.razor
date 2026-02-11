@@ -1,0 +1,287 @@
+@page "/shipments"
+@using HighHeavyShipment.Application.DTOs
+@using HighHeavyShipment.Domain
+@inject HttpClient Http
+@rendermode InteractiveServer
+
+<PageTitle>Shipments</PageTitle>
+
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <h1>High & Heavy Shipments</h1>
+        </div>
+        <div class="col-md-6 text-end">
+            <button class="btn btn-primary" @onclick="ShowCreateForm">+ New Shipment</button>
+        </div>
+    </div>
+
+    @if (showCreateForm)
+    {
+        <div class="card mb-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Create New Shipment</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Reference</label>
+                        <input type="text" class="form-control" @bind="newShipment.Reference" placeholder="e.g., SHP-2026-001" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Mode</label>
+                        <select class="form-select" @bind="newShipment.Mode">
+                            <option value="@ShipmentMode.Sea">Sea</option>
+                            <option value="@ShipmentMode.Land">Land</option>
+                            <option value="@ShipmentMode.Air">Air</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Origin</label>
+                        <input type="text" class="form-control" @bind="newShipment.Origin" placeholder="e.g., Shanghai" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Destination</label>
+                        <input type="text" class="form-control" @bind="newShipment.Destination" placeholder="e.g., Rotterdam" />
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Weight (kg)</label>
+                        <input type="number" class="form-control" @bind="newShipment.WeightKg" placeholder="0.00" step="0.01" />
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(createErrorMessage))
+                {
+                    <div class="alert alert-danger">@createErrorMessage</div>
+                }
+
+                <div>
+                    <button class="btn btn-success" @onclick="CreateShipment">Create</button>
+                    <button class="btn btn-secondary" @onclick="HideCreateForm">Cancel</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (shipments == null)
+    {
+        <p>Loading shipments...</p>
+    }
+    else if (shipments.Count == 0)
+    {
+        <p class="text-muted">No shipments found. Create one to get started.</p>
+    }
+    else
+    {
+        <div class="row">
+            @foreach (var shipment in shipments)
+            {
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <h5 class="mb-0">@shipment.Reference</h5>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Mode:</strong> @shipment.Mode</p>
+                            <p><strong>Route:</strong> @shipment.Origin → @shipment.Destination</p>
+                            <p><strong>Weight:</strong> @shipment.WeightKg:F2 kg</p>
+                            <p><strong>Status:</strong> <span class="badge bg-info">@shipment.Status</span></p>
+
+                            @if (shipment.Quotes.Any())
+                            {
+                                <h6 class="mt-3">Quotes:</h6>
+                                <ul class="list-unstyled">
+                                    @foreach (var quote in shipment.Quotes.OrderBy(q => q.Phase))
+                                    {
+                                        <li>
+                                            <span class="badge bg-secondary">@quote.Phase</span>
+                                            @quote.Amount.ToString("F2") @quote.Currency
+                                            <small class="text-muted">(@quote.CreatedAt.ToString("g"))</small>
+                                        </li>
+                                    }
+                                </ul>
+                            }
+                        </div>
+                        <div class="card-footer">
+                            <button class="btn btn-sm btn-primary" @onclick="() => ShowQuoteForm(shipment.Id)">Add Quote</button>
+                            <button class="btn btn-sm btn-warning" @onclick="() => AdvanceStatus(shipment.Id)">Advance Status</button>
+                            <button class="btn btn-sm btn-info" @onclick="() => ViewDetails(shipment.Id)">View Details</button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @if (showQuoteForm)
+    {
+        <div class="card mb-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Add Quote</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Phase</label>
+                        <select class="form-select" @bind="newQuote.Phase">
+                            <option value="@ShipmentStatus.QuotationRequested">QuotationRequested</option>
+                            <option value="@ShipmentStatus.QuotationApproved">QuotationApproved</option>
+                            <option value="@ShipmentStatus.BookingConfirmed">BookingConfirmed</option>
+                            <option value="@ShipmentStatus.InTransit">InTransit</option>
+                            <option value="@ShipmentStatus.Delivered">Delivered</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Amount</label>
+                        <input type="number" class="form-control" @bind="newQuote.Amount" placeholder="0.00" step="0.01" />
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Currency</label>
+                        <input type="text" class="form-control" @bind="newQuote.Currency" placeholder="USD" maxlength="3" />
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(quoteErrorMessage))
+                {
+                    <div class="alert alert-danger">@quoteErrorMessage</div>
+                }
+
+                <div>
+                    <button class="btn btn-success" @onclick="CreateQuote">Add Quote</button>
+                    <button class="btn btn-secondary" @onclick="HideQuoteForm">Cancel</button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<ShipmentDto>? shipments;
+    private bool showCreateForm = false;
+    private bool showQuoteForm = false;
+    private string createErrorMessage = string.Empty;
+    private string quoteErrorMessage = string.Empty;
+    private Guid selectedShipmentId = Guid.Empty;
+
+    private class NewShipmentModel
+    {
+        public string Reference { get; set; } = string.Empty;
+        public ShipmentMode Mode { get; set; } = ShipmentMode.Sea;
+        public string Origin { get; set; } = string.Empty;
+        public string Destination { get; set; } = string.Empty;
+        public decimal WeightKg { get; set; }
+    }
+
+    private class NewQuoteModel
+    {
+        public ShipmentStatus Phase { get; set; } = ShipmentStatus.QuotationRequested;
+        public decimal Amount { get; set; }
+        public string Currency { get; set; } = "USD";
+    }
+
+    private NewShipmentModel newShipment = new();
+    private NewQuoteModel newQuote = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadShipments();
+    }
+
+    private async Task LoadShipments()
+    {
+        try
+        {
+            shipments = await Http.GetFromJsonAsync<List<ShipmentDto>>("api/shipments") ?? new();
+        }
+        catch (Exception ex)
+        {
+            createErrorMessage = $"Error loading shipments: {ex.Message}";
+        }
+    }
+
+    private void ShowCreateForm() => showCreateForm = true;
+    private void HideCreateForm() => showCreateForm = false;
+    private void ShowQuoteForm(Guid shipmentId)
+    {
+        selectedShipmentId = shipmentId;
+        showQuoteForm = true;
+    }
+    private void HideQuoteForm() => showQuoteForm = false;
+
+    private async Task CreateShipment()
+    {
+        createErrorMessage = string.Empty;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/shipments", newShipment);
+            if (response.IsSuccessStatusCode)
+            {
+                newShipment = new();
+                showCreateForm = false;
+                await LoadShipments();
+            }
+            else
+            {
+                createErrorMessage = await response.Content.ReadAsStringAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            createErrorMessage = ex.Message;
+        }
+    }
+
+    private async Task CreateQuote()
+    {
+        quoteErrorMessage = string.Empty;
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"api/shipments/{selectedShipmentId}/quotes", newQuote);
+            if (response.IsSuccessStatusCode)
+            {
+                newQuote = new();
+                showQuoteForm = false;
+                await LoadShipments();
+            }
+            else
+            {
+                quoteErrorMessage = await response.Content.ReadAsStringAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            quoteErrorMessage = ex.Message;
+        }
+    }
+
+    private async Task AdvanceStatus(Guid shipmentId)
+    {
+        try
+        {
+            var response = await Http.PostAsync($"api/shipments/{shipmentId}/status/advance", null);
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadShipments();
+            }
+            else
+            {
+                createErrorMessage = await response.Content.ReadAsStringAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            createErrorMessage = ex.Message;
+        }
+    }
+
+    private async Task ViewDetails(Guid shipmentId)
+    {
+        // Could navigate to detail page or show modal
+    }
+}
