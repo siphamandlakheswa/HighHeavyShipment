@@ -2,7 +2,7 @@
 
 using System;
 
-namespace YourNamespace
+namespace HighHeavyShipment.Domain
 {
     public class Result
     {
