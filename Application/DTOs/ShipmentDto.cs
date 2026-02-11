@@ -13,10 +13,3 @@ public record ShipmentDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset? UpdatedAt,
     List<ShipmentQuoteDto> Quotes);
-
-public record ShipmentQuoteDto(
-    Guid Id,
-    ShipmentStatus Phase,
-    decimal Amount,
-    string Currency,
-    DateTimeOffset CreatedAt);
